@@ -1,7 +1,5 @@
 use crate::contextual_user_message::ADDITIONAL_CONTEXT_FRAGMENT;
 use crate::contextual_user_message::ContextualUserFragment;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
 use codex_protocol::user_input::EphemeralContext;
 
 impl ContextualUserFragment for EphemeralContext {
@@ -17,15 +15,11 @@ impl ContextualUserFragment for EphemeralContext {
     }
 }
 
-impl From<EphemeralContext> for ResponseItem {
-    fn from(context: EphemeralContext) -> Self {
-        context.into_response_item()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_protocol::models::ContentItem;
+    use codex_protocol::models::ResponseItem;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -34,7 +28,7 @@ mod tests {
             title: "Context from my editor".to_string(),
             text: "## Active file: src/main.rs".to_string(),
         };
-        let response_item: ResponseItem = context.into();
+        let response_item = context.into_response_item();
 
         let ResponseItem::Message { role, content, .. } = response_item else {
             panic!("expected ResponseItem::Message");
