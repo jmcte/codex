@@ -6,6 +6,8 @@
 
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::protocol::ADDITIONAL_CONTEXT_CLOSE_TAG;
+use codex_protocol::protocol::ADDITIONAL_CONTEXT_OPEN_TAG;
 use codex_protocol::protocol::ENVIRONMENT_CONTEXT_CLOSE_TAG;
 use codex_protocol::protocol::ENVIRONMENT_CONTEXT_OPEN_TAG;
 
@@ -21,6 +23,8 @@ pub(crate) const SUBAGENTS_OPEN_TAG: &str = "<subagents>";
 pub(crate) const SUBAGENTS_CLOSE_TAG: &str = "</subagents>";
 pub(crate) const SUBAGENT_NOTIFICATION_OPEN_TAG: &str = "<subagent_notification>";
 pub(crate) const SUBAGENT_NOTIFICATION_CLOSE_TAG: &str = "</subagent_notification>";
+pub(crate) const ADDITIONAL_CONTEXT_OPEN_MARKER: &str = ADDITIONAL_CONTEXT_OPEN_TAG;
+pub(crate) const ADDITIONAL_CONTEXT_CLOSE_MARKER: &str = ADDITIONAL_CONTEXT_CLOSE_TAG;
 
 #[derive(Clone, Copy)]
 pub(crate) struct ContextualUserFragmentDefinition {
@@ -118,6 +122,11 @@ pub(crate) const SUBAGENT_NOTIFICATION_FRAGMENT: ContextualUserFragmentDefinitio
         SUBAGENT_NOTIFICATION_OPEN_TAG,
         SUBAGENT_NOTIFICATION_CLOSE_TAG,
     );
+pub(crate) const ADDITIONAL_CONTEXT_FRAGMENT: ContextualUserFragmentDefinition =
+    ContextualUserFragmentDefinition::new(
+        ADDITIONAL_CONTEXT_OPEN_MARKER,
+        ADDITIONAL_CONTEXT_CLOSE_MARKER,
+    );
 
 const CONTEXTUAL_USER_FRAGMENTS: &[ContextualUserFragmentDefinition] = &[
     AGENTS_MD_FRAGMENT,
@@ -127,6 +136,7 @@ const CONTEXTUAL_USER_FRAGMENTS: &[ContextualUserFragmentDefinition] = &[
     TURN_ABORTED_FRAGMENT,
     SUBAGENTS_FRAGMENT,
     SUBAGENT_NOTIFICATION_FRAGMENT,
+    ADDITIONAL_CONTEXT_FRAGMENT,
 ];
 
 pub(crate) fn is_contextual_user_fragment(content_item: &ContentItem) -> bool {
@@ -169,6 +179,15 @@ mod tests {
     fn detects_subagents_fragment() {
         assert!(is_contextual_user_fragment(&ContentItem::InputText {
             text: "<subagents>\n  - agent-1: atlas\n</subagents>".to_string(),
+        }));
+    }
+
+    #[test]
+    fn detects_additional_context_fragment() {
+        assert!(is_contextual_user_fragment(&ContentItem::InputText {
+            text:
+                "<additional_context>\n<title>Context from my editor</title>\n</additional_context>"
+                    .to_string(),
         }));
     }
 

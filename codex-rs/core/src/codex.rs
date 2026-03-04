@@ -307,6 +307,7 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::InitialHistory;
+use codex_protocol::user_input::EphemeralContext;
 use codex_protocol::user_input::UserInput;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_readiness::Readiness;
@@ -654,6 +655,7 @@ impl TurnSkillsContext {
 pub(crate) struct TurnContext {
     pub(crate) sub_id: String,
     pub(crate) realtime_active: bool,
+    pub(crate) ephemeral_context: Vec<EphemeralContext>,
     pub(crate) config: Arc<Config>,
     pub(crate) auth_manager: Option<Arc<AuthManager>>,
     pub(crate) model_info: ModelInfo,
@@ -742,6 +744,7 @@ impl TurnContext {
         Self {
             sub_id: self.sub_id.clone(),
             realtime_active: self.realtime_active,
+            ephemeral_context: self.ephemeral_context.clone(),
             config: Arc::new(config),
             auth_manager: self.auth_manager.clone(),
             model_info: model_info.clone(),
@@ -1126,6 +1129,7 @@ impl Session {
         TurnContext {
             sub_id,
             realtime_active: false,
+            ephemeral_context: Vec::new(),
             config: per_turn_config.clone(),
             auth_manager: auth_manager_for_context,
             model_info: model_info.clone(),
@@ -1721,6 +1725,7 @@ impl Session {
                     text,
                     text_elements: Vec::new(),
                 }],
+                ephemeral_context: Vec::new(),
                 final_output_json_schema: None,
             },
         )
@@ -2098,6 +2103,7 @@ impl Session {
         &self,
         sub_id: String,
         updates: SessionSettingsUpdate,
+        ephemeral_context: Vec<EphemeralContext>,
     ) -> ConstraintResult<Arc<TurnContext>> {
         let (
             session_configuration,
@@ -2151,6 +2157,7 @@ impl Session {
                 session_configuration,
                 updates.final_output_json_schema,
                 sandbox_policy_changed,
+                ephemeral_context,
             )
             .await)
     }
@@ -2161,6 +2168,7 @@ impl Session {
         session_configuration: SessionConfiguration,
         final_output_json_schema: Option<Option<Value>>,
         sandbox_policy_changed: bool,
+        ephemeral_context: Vec<EphemeralContext>,
     ) -> Arc<TurnContext> {
         let per_turn_config = Self::build_per_turn_config(&session_configuration);
         self.services
@@ -2220,6 +2228,7 @@ impl Session {
             skills_outcome,
         );
         turn_context.realtime_active = self.conversation.running_state().await.is_some();
+        turn_context.ephemeral_context = ephemeral_context;
 
         if let Some(final_schema) = final_output_json_schema {
             turn_context.final_output_json_schema = final_schema;
@@ -2377,7 +2386,7 @@ impl Session {
             let state = self.state.lock().await;
             state.session_configuration.clone()
         };
-        self.new_turn_from_configuration(sub_id, session_configuration, None, false)
+        self.new_turn_from_configuration(sub_id, session_configuration, None, false, Vec::new())
             .await
     }
 
@@ -3146,6 +3155,9 @@ impl Session {
         if let Some(subagent_roster) = crate::session_prefix::SubagentRosterContext::new(subagents)
         {
             contextual_user_envelope.push_fragment(subagent_roster);
+        }
+        for ephemeral_context in turn_context.ephemeral_context.iter().cloned() {
+            contextual_user_envelope.push_fragment(ephemeral_context);
         }
 
         let mut items = Vec::with_capacity(2);
@@ -3995,7 +4007,7 @@ mod handlers {
     }
 
     pub async fn user_input_or_turn(sess: &Arc<Session>, sub_id: String, op: Op) {
-        let (items, updates) = match op {
+        let (items, ephemeral_context, updates) = match op {
             Op::UserTurn {
                 cwd,
                 approval_policy,
@@ -4021,6 +4033,7 @@ mod handlers {
                 });
                 (
                     items,
+                    Vec::new(),
                     SessionSettingsUpdate {
                         cwd: Some(cwd),
                         approval_policy: Some(approval_policy),
@@ -4037,9 +4050,11 @@ mod handlers {
             }
             Op::UserInput {
                 items,
+                ephemeral_context,
                 final_output_json_schema,
             } => (
                 items,
+                ephemeral_context,
                 SessionSettingsUpdate {
                     final_output_json_schema: Some(final_output_json_schema),
                     ..Default::default()
@@ -4048,7 +4063,10 @@ mod handlers {
             _ => unreachable!(),
         };
 
-        let Ok(current_context) = sess.new_turn_with_sub_id(sub_id, updates).await else {
+        let Ok(current_context) = sess
+            .new_turn_with_sub_id(sub_id, updates, ephemeral_context)
+            .await
+        else {
             // new_turn_with_sub_id already emits the error event.
             return;
         };
@@ -4773,6 +4791,7 @@ async fn spawn_review_thread(
     let review_turn_context = TurnContext {
         sub_id: review_turn_id,
         realtime_active: parent_turn_context.realtime_active,
+        ephemeral_context: Vec::new(),
         config: per_turn_config,
         auth_manager: auth_manager_for_context,
         model_info: model_info.clone(),
@@ -6686,6 +6705,7 @@ mod tests {
     use codex_protocol::openai_models::ModelsResponse;
     use codex_protocol::protocol::Submission;
     use codex_protocol::protocol::W3cTraceContext;
+    use codex_protocol::user_input::EphemeralContext;
     use opentelemetry::trace::TraceContextExt;
     use opentelemetry::trace::TraceId;
     use opentelemetry::trace::TracerProvider as _;
@@ -6740,6 +6760,23 @@ mod tests {
             .iter()
             .filter_map(|item| match item {
                 ResponseItem::Message { role, content, .. } if role == "developer" => {
+                    Some(content.as_slice())
+                }
+                _ => None,
+            })
+            .flat_map(|content| content.iter())
+            .filter_map(|item| match item {
+                ContentItem::InputText { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn user_input_texts(items: &[ResponseItem]) -> Vec<&str> {
+        items
+            .iter()
+            .filter_map(|item| match item {
+                ResponseItem::Message { role, content, .. } if role == "user" => {
                     Some(content.as_slice())
                 }
                 _ => None,
@@ -9111,6 +9148,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn build_initial_context_includes_ephemeral_context() {
+        let (session, mut turn_context) = make_session_and_context().await;
+        turn_context.ephemeral_context = vec![EphemeralContext {
+            title: "Context from my editor".to_string(),
+            text: "## Active file: src/main.rs".to_string(),
+        }];
+
+        let initial_context = session.build_initial_context(&turn_context).await;
+        let user_texts = user_input_texts(&initial_context);
+        assert!(
+            user_texts
+                .iter()
+                .any(|text| text.contains("<additional_context>")),
+            "expected initial context to include an additional_context section, got {user_texts:?}"
+        );
+        assert!(
+            user_texts
+                .iter()
+                .any(|text| text.contains("<title>Context from my editor</title>")),
+            "expected initial context to include the ephemeral context title, got {user_texts:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn record_context_updates_and_set_reference_context_item_injects_full_context_when_baseline_missing()
      {
         let (session, turn_context) = make_session_and_context().await;
@@ -9242,6 +9303,37 @@ mod tests {
                 .expect("serialize persisted turn context item"),
             serde_json::to_value(Some(turn_context.to_turn_context_item()))
                 .expect("serialize expected turn context item")
+        );
+    }
+
+    #[tokio::test]
+    async fn build_settings_update_items_emit_ephemeral_context_without_durable_diffs() {
+        let (session, mut turn_context) = make_session_and_context().await;
+        let previous_context_item = turn_context.to_turn_context_item();
+        {
+            let mut state = session.state.lock().await;
+            state.set_reference_context_item(Some(previous_context_item.clone()));
+        }
+        turn_context.ephemeral_context = vec![EphemeralContext {
+            title: "Context from my editor".to_string(),
+            text: "## Active file: src/lib.rs".to_string(),
+        }];
+
+        let update_items = session
+            .build_settings_update_items(Some(&previous_context_item), &turn_context)
+            .await;
+        let developer_texts = developer_input_texts(&update_items);
+        let user_texts = user_input_texts(&update_items);
+        assert_eq!(developer_texts, Vec::<&str>::new());
+        assert!(
+            user_texts
+                .iter()
+                .any(|text| text.contains("<additional_context>")),
+            "expected steady-state updates to include additional_context, got {user_texts:?}"
+        );
+        assert!(
+            user_texts.iter().any(|text| text.contains("src/lib.rs")),
+            "expected steady-state updates to include the ephemeral context body, got {user_texts:?}"
         );
     }
 
