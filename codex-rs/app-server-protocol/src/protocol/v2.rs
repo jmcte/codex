@@ -634,7 +634,7 @@ pub struct NetworkRequirements {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub enum ResidencyRequirement {
     Us,
@@ -2369,8 +2369,8 @@ pub enum HazelnutScope {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS, Default)]
-#[serde(rename_all = "lowercase")]
-#[ts(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub enum ProductSurface {
     Chatgpt,
@@ -4017,8 +4017,8 @@ pub struct FileChangeRequestApprovalResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
-#[ts(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub enum McpServerElicitationAction {
     Accept,
