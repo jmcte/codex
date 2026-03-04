@@ -764,7 +764,7 @@ When the client responds to `item/tool/requestUserInput`, the server emits `serv
 
 ### MCP server elicitations
 
-MCP servers can interrupt a turn and ask the client for a simple accept/decline/cancel decision via `mcpServer/elicitation/request`. This is additive to the legacy raw event stream: v2 clients may still receive `codex/event/elicitation_request` if they opt into raw core events.
+MCP servers can interrupt a turn and ask the client for a simple accept/decline/cancel decision via `mcpServer/elicitation/request`.
 
 Order of messages:
 

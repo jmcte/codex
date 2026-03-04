@@ -4041,9 +4041,15 @@ impl McpServerElicitationAction {
 #[ts(export_to = "v2/")]
 pub struct McpServerElicitationRequestParams {
     pub thread_id: String,
+    /// Active Codex turn when the elicitation was observed, if available.
+    ///
+    /// This is nullable because MCP defines elicitation as a general
+    /// server-to-client request, not a turn- or tool-call-scoped primitive.
     pub turn_id: Option<String>,
     pub server_name: String,
     pub message: String,
+    // TODO: If the MCP elicitation is triggered by an MCP tool call, we should expose the McpToolCall
+    // item ID as well. However, we need to update core to plumb this through first.
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
