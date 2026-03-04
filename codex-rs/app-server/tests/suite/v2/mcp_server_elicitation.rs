@@ -289,71 +289,65 @@ impl ServerHandler for ElicitationAppsMcpServer {
         }
     }
 
-    fn list_tools(
+    async fn list_tools(
         &self,
         _request: Option<rmcp::model::PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<ListToolsResult, rmcp::ErrorData>> + Send + '_
-    {
-        async move {
-            let input_schema: JsonObject = serde_json::from_value(json!({
-                "type": "object",
-                "additionalProperties": false
-            }))
-            .map_err(|err| rmcp::ErrorData::internal_error(err.to_string(), None))?;
+    ) -> Result<ListToolsResult, rmcp::ErrorData> {
+        let input_schema: JsonObject = serde_json::from_value(json!({
+            "type": "object",
+            "additionalProperties": false
+        }))
+        .map_err(|err| rmcp::ErrorData::internal_error(err.to_string(), None))?;
 
-            let mut tool = Tool::new(
-                Cow::Borrowed(TOOL_NAME),
-                Cow::Borrowed("Confirm a calendar action."),
-                Arc::new(input_schema),
-            );
-            tool.annotations = Some(ToolAnnotations::new().read_only(true));
+        let mut tool = Tool::new(
+            Cow::Borrowed(TOOL_NAME),
+            Cow::Borrowed("Confirm a calendar action."),
+            Arc::new(input_schema),
+        );
+        tool.annotations = Some(ToolAnnotations::new().read_only(true));
 
-            let mut meta = Meta::new();
-            meta.0
-                .insert("connector_id".to_string(), json!(CONNECTOR_ID));
-            meta.0
-                .insert("connector_name".to_string(), json!(CONNECTOR_NAME));
-            tool.meta = Some(meta);
+        let mut meta = Meta::new();
+        meta.0
+            .insert("connector_id".to_string(), json!(CONNECTOR_ID));
+        meta.0
+            .insert("connector_name".to_string(), json!(CONNECTOR_NAME));
+        tool.meta = Some(meta);
 
-            Ok(ListToolsResult {
-                tools: vec![tool],
-                next_cursor: None,
-                meta: None,
-            })
-        }
+        Ok(ListToolsResult {
+            tools: vec![tool],
+            next_cursor: None,
+            meta: None,
+        })
     }
 
-    fn call_tool(
+    async fn call_tool(
         &self,
         _request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, rmcp::ErrorData>> + Send + '_
-    {
-        async move {
-            let requested_schema = ElicitationSchema::builder()
-                .required_property("confirmed", PrimitiveSchema::Boolean(BooleanSchema::new()))
-                .build()
-                .map_err(|err| rmcp::ErrorData::internal_error(err.to_string(), None))?;
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let requested_schema = ElicitationSchema::builder()
+            .required_property("confirmed", PrimitiveSchema::Boolean(BooleanSchema::new()))
+            .build()
+            .map_err(|err| rmcp::ErrorData::internal_error(err.to_string(), None))?;
 
-            let result = context
-                .peer
-                .create_elicitation(CreateElicitationRequestParams::FormElicitationParams {
-                    meta: None,
-                    message: ELICITATION_MESSAGE.to_string(),
-                    requested_schema,
-                })
-                .await
-                .map_err(|err| rmcp::ErrorData::internal_error(err.to_string(), None))?;
+        let result = context
+            .peer
+            .create_elicitation(CreateElicitationRequestParams::FormElicitationParams {
+                meta: None,
+                message: ELICITATION_MESSAGE.to_string(),
+                requested_schema,
+            })
+            .await
+            .map_err(|err| rmcp::ErrorData::internal_error(err.to_string(), None))?;
 
-            let output = match result.action {
-                ElicitationAction::Accept => "accepted",
-                ElicitationAction::Decline => "declined",
-                ElicitationAction::Cancel => "cancelled",
-            };
+        let output = match result.action {
+            ElicitationAction::Accept => "accepted",
+            ElicitationAction::Decline => "declined",
+            ElicitationAction::Cancel => "cancelled",
+        };
 
-            Ok(CallToolResult::success(vec![Content::text(output)]))
-        }
+        Ok(CallToolResult::success(vec![Content::text(output)]))
     }
 }
 

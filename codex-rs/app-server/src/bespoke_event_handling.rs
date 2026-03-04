@@ -2026,27 +2026,7 @@ async fn on_mcp_server_elicitation_response(
     let response = receiver.await;
     resolve_server_request_on_thread_listener(&thread_state, pending_request_id).await;
     drop(permission_guard);
-    let action = match response {
-        Ok(Ok(value)) => {
-            let response = serde_json::from_value::<McpServerElicitationRequestResponse>(value)
-                .unwrap_or_else(|err| {
-                    error!("failed to deserialize McpServerElicitationRequestResponse: {err}");
-                    McpServerElicitationRequestResponse {
-                        action: McpServerElicitationAction::Decline,
-                    }
-                });
-            response.action
-        }
-        Ok(Err(err)) if is_turn_transition_server_request_error(&err) => return,
-        Ok(Err(err)) => {
-            error!("request failed with client error: {err:?}");
-            McpServerElicitationAction::Decline
-        }
-        Err(err) => {
-            error!("request failed: {err:?}");
-            McpServerElicitationAction::Decline
-        }
-    };
+    let action = mcp_server_elicitation_action_from_response(response);
 
     if let Err(err) = conversation
         .submit(Op::ResolveElicitation {
@@ -2057,6 +2037,34 @@ async fn on_mcp_server_elicitation_response(
         .await
     {
         error!("failed to submit ResolveElicitation: {err}");
+    }
+}
+
+fn mcp_server_elicitation_action_from_response(
+    response: std::result::Result<ClientRequestResult, oneshot::error::RecvError>,
+) -> McpServerElicitationAction {
+    match response {
+        Ok(Ok(value)) => {
+            let response = serde_json::from_value::<McpServerElicitationRequestResponse>(value)
+                .unwrap_or_else(|err| {
+                    error!("failed to deserialize McpServerElicitationRequestResponse: {err}");
+                    McpServerElicitationRequestResponse {
+                        action: McpServerElicitationAction::Decline,
+                    }
+                });
+            response.action
+        }
+        Ok(Err(err)) if is_turn_transition_server_request_error(&err) => {
+            McpServerElicitationAction::Cancel
+        }
+        Ok(Err(err)) => {
+            error!("request failed with client error: {err:?}");
+            McpServerElicitationAction::Decline
+        }
+        Err(err) => {
+            error!("request failed: {err:?}");
+            McpServerElicitationAction::Decline
+        }
     }
 }
 
@@ -2405,6 +2413,7 @@ mod tests {
     use anyhow::Result;
     use anyhow::anyhow;
     use anyhow::bail;
+    use codex_app_server_protocol::JSONRPCErrorError;
     use codex_app_server_protocol::TurnPlanStepStatus;
     use codex_protocol::mcp::CallToolResult;
     use codex_protocol::plan_tool::PlanItemArg;
@@ -2447,6 +2456,19 @@ mod tests {
             map_file_change_approval_decision(FileChangeApprovalDecision::AcceptForSession);
         assert_eq!(decision, ReviewDecision::ApprovedForSession);
         assert_eq!(completion_status, None);
+    }
+
+    #[test]
+    fn mcp_server_elicitation_turn_transition_error_maps_to_cancel() {
+        let error = JSONRPCErrorError {
+            code: -1,
+            message: "client request resolved because the turn state was changed".to_string(),
+            data: Some(serde_json::json!({ "reason": "turnTransition" })),
+        };
+
+        let action = mcp_server_elicitation_action_from_response(Ok(Err(error)));
+
+        assert_eq!(action, McpServerElicitationAction::Cancel);
     }
 
     #[test]
