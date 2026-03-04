@@ -5187,6 +5187,7 @@
           "type": "string"
         },
         "turnId": {
+          "description": "Active Codex turn when the elicitation was observed, if available.\n\nThis is nullable because MCP defines elicitation as a general server-to-client request, not a turn- or tool-call-scoped primitive.",
           "type": [
             "string",
             "null"
