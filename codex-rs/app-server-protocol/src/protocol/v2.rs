@@ -4016,6 +4016,43 @@ pub struct FileChangeRequestApprovalResponse {
     pub decision: FileChangeApprovalDecision,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(rename_all = "lowercase")]
+#[ts(export_to = "v2/")]
+pub enum McpServerElicitationAction {
+    Accept,
+    Decline,
+    Cancel,
+}
+
+impl McpServerElicitationAction {
+    pub fn to_core(self) -> codex_protocol::approvals::ElicitationAction {
+        match self {
+            Self::Accept => codex_protocol::approvals::ElicitationAction::Accept,
+            Self::Decline => codex_protocol::approvals::ElicitationAction::Decline,
+            Self::Cancel => codex_protocol::approvals::ElicitationAction::Cancel,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct McpServerElicitationRequestParams {
+    pub thread_id: String,
+    pub turn_id: Option<String>,
+    pub server_name: String,
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct McpServerElicitationRequestResponse {
+    pub action: McpServerElicitationAction,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]

@@ -762,6 +762,18 @@ UI guidance for IDEs: surface an approval dialog as soon as the request arrives.
 
 When the client responds to `item/tool/requestUserInput`, the server emits `serverRequest/resolved` with `{ threadId, requestId }`. If the pending request is cleared by turn start, turn completion, or turn interruption before the client answers, the server emits the same notification for that cleanup.
 
+### MCP server elicitations
+
+MCP servers can interrupt a turn and ask the client for a simple accept/decline/cancel decision via `mcpServer/elicitation/request`. This is additive to the legacy raw event stream: v2 clients may still receive `codex/event/elicitation_request` if they opt into raw core events.
+
+Order of messages:
+
+1. `mcpServer/elicitation/request` (request) — includes `threadId`, nullable `turnId`, `serverName`, and the human-readable `message`.
+2. Client response — `{ "action": "accept" }`, `{ "action": "decline" }`, or `{ "action": "cancel" }`.
+3. `serverRequest/resolved` — `{ threadId, requestId }` confirms the pending request has been resolved or cleared, including lifecycle cleanup on turn start/complete/interrupt.
+
+`turnId` is best-effort. When the elicitation is correlated with an active turn, the request includes that turn id; otherwise it is `null`.
+
 ### Dynamic tool calls (experimental)
 
 `dynamicTools` on `thread/start` and the corresponding `item/tool/call` request/response flow are experimental APIs. To enable them, set `initialize.params.capabilities.experimentalApi = true`.

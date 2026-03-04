@@ -45,6 +45,9 @@ use codex_app_server_protocol::InterruptConversationResponse;
 use codex_app_server_protocol::ItemCompletedNotification;
 use codex_app_server_protocol::ItemStartedNotification;
 use codex_app_server_protocol::JSONRPCErrorError;
+use codex_app_server_protocol::McpServerElicitationAction;
+use codex_app_server_protocol::McpServerElicitationRequestParams;
+use codex_app_server_protocol::McpServerElicitationRequestResponse;
 use codex_app_server_protocol::McpToolCallError;
 use codex_app_server_protocol::McpToolCallResult;
 use codex_app_server_protocol::McpToolCallStatus;
@@ -597,6 +600,38 @@ pub(crate) async fn apply_bespoke_event_handling(
                 {
                     error!("failed to submit UserInputAnswer: {err}");
                 }
+            }
+        }
+        EventMsg::ElicitationRequest(request) => {
+            if matches!(api_version, ApiVersion::V2) {
+                let permission_guard = thread_watch_manager
+                    .note_permission_requested(&conversation_id.to_string())
+                    .await;
+                let turn_id = {
+                    let state = thread_state.lock().await;
+                    state.active_turn_snapshot().map(|turn| turn.id)
+                };
+                let params = McpServerElicitationRequestParams {
+                    thread_id: conversation_id.to_string(),
+                    turn_id,
+                    server_name: request.server_name.clone(),
+                    message: request.message,
+                };
+                let (pending_request_id, rx) = outgoing
+                    .send_request(ServerRequestPayload::McpServerElicitationRequest(params))
+                    .await;
+                tokio::spawn(async move {
+                    on_mcp_server_elicitation_response(
+                        request.server_name,
+                        request.id,
+                        pending_request_id,
+                        rx,
+                        conversation,
+                        thread_state,
+                        permission_guard,
+                    )
+                    .await;
+                });
             }
         }
         EventMsg::DynamicToolCallRequest(request) => {
@@ -1976,6 +2011,52 @@ async fn on_request_user_input_response(
         .await
     {
         error!("failed to submit UserInputAnswer: {err}");
+    }
+}
+
+async fn on_mcp_server_elicitation_response(
+    server_name: String,
+    request_id: codex_protocol::mcp::RequestId,
+    pending_request_id: RequestId,
+    receiver: oneshot::Receiver<ClientRequestResult>,
+    conversation: Arc<CodexThread>,
+    thread_state: Arc<Mutex<ThreadState>>,
+    permission_guard: ThreadWatchActiveGuard,
+) {
+    let response = receiver.await;
+    resolve_server_request_on_thread_listener(&thread_state, pending_request_id).await;
+    drop(permission_guard);
+    let action = match response {
+        Ok(Ok(value)) => {
+            let response = serde_json::from_value::<McpServerElicitationRequestResponse>(value)
+                .unwrap_or_else(|err| {
+                    error!("failed to deserialize McpServerElicitationRequestResponse: {err}");
+                    McpServerElicitationRequestResponse {
+                        action: McpServerElicitationAction::Decline,
+                    }
+                });
+            response.action
+        }
+        Ok(Err(err)) if is_turn_transition_server_request_error(&err) => return,
+        Ok(Err(err)) => {
+            error!("request failed with client error: {err:?}");
+            McpServerElicitationAction::Decline
+        }
+        Err(err) => {
+            error!("request failed: {err:?}");
+            McpServerElicitationAction::Decline
+        }
+    };
+
+    if let Err(err) = conversation
+        .submit(Op::ResolveElicitation {
+            server_name,
+            request_id,
+            decision: action.to_core(),
+        })
+        .await
+    {
+        error!("failed to submit ResolveElicitation: {err}");
     }
 }
 

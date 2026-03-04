@@ -637,6 +637,31 @@
         }
       ]
     },
+    "McpServerElicitationRequestParams": {
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "serverName": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "message",
+        "serverName",
+        "threadId"
+      ],
+      "type": "object"
+    },
     "NetworkApprovalContext": {
       "properties": {
         "host": {
@@ -964,6 +989,31 @@
         "params"
       ],
       "title": "Item/tool/requestUserInputRequest",
+      "type": "object"
+    },
+    {
+      "description": "Request input for an MCP server elicitation.",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "mcpServer/elicitation/request"
+          ],
+          "title": "McpServer/elicitation/requestRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/McpServerElicitationRequestParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "McpServer/elicitation/requestRequest",
       "type": "object"
     },
     {
