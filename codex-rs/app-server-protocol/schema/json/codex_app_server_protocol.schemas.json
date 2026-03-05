@@ -5178,6 +5178,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
         "message": {
+          "description": "Human-readable prompt from the underlying MCP elicitation request.\n\nCore currently reduces the upstream RMCP `CreateElicitationRequestParams` to this message string before it reaches app-server, so the v2 API cannot expose the full form/url request shape yet.",
           "type": "string"
         },
         "serverName": {
@@ -5187,7 +5188,7 @@
           "type": "string"
         },
         "turnId": {
-          "description": "Active Codex turn when the elicitation was observed, if available.\n\nThis is nullable because MCP defines elicitation as a general server-to-client request, not a turn- or tool-call-scoped primitive.",
+          "description": "Active Codex turn when this elicitation was observed, if app-server could correlate one.\n\nThis is nullable because MCP models elicitation as a standalone server-to-client request identified by the MCP server request id. It may be triggered during a turn, but turn context is app-server correlation rather than part of the protocol identity of the elicitation itself.",
           "type": [
             "string",
             "null"
@@ -5207,6 +5208,9 @@
       "properties": {
         "action": {
           "$ref": "#/definitions/McpServerElicitationAction"
+        },
+        "content": {
+          "description": "Structured user input for accepted elicitations, mirroring RMCP `CreateElicitationResult`.\n\nThis is nullable because decline/cancel responses have no content, and current core only resolves elicitations by decision."
         }
       },
       "required": [

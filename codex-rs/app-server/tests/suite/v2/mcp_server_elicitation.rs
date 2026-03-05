@@ -201,6 +201,7 @@ async fn mcp_server_elicitation_round_trip() -> Result<()> {
         request_id,
         serde_json::to_value(McpServerElicitationRequestResponse {
             action: McpServerElicitationAction::Accept,
+            content: None,
         })?,
     )
     .await?;

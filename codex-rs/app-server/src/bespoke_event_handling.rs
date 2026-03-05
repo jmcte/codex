@@ -2050,6 +2050,7 @@ fn mcp_server_elicitation_action_from_response(
                     error!("failed to deserialize McpServerElicitationRequestResponse: {err}");
                     McpServerElicitationRequestResponse {
                         action: McpServerElicitationAction::Decline,
+                        content: None,
                     }
                 });
             response.action

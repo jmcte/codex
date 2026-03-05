@@ -4036,20 +4036,48 @@ impl McpServerElicitationAction {
     }
 }
 
+impl From<McpServerElicitationAction> for rmcp::model::ElicitationAction {
+    fn from(value: McpServerElicitationAction) -> Self {
+        match value {
+            McpServerElicitationAction::Accept => Self::Accept,
+            McpServerElicitationAction::Decline => Self::Decline,
+            McpServerElicitationAction::Cancel => Self::Cancel,
+        }
+    }
+}
+
+impl From<rmcp::model::ElicitationAction> for McpServerElicitationAction {
+    fn from(value: rmcp::model::ElicitationAction) -> Self {
+        match value {
+            rmcp::model::ElicitationAction::Accept => Self::Accept,
+            rmcp::model::ElicitationAction::Decline => Self::Decline,
+            rmcp::model::ElicitationAction::Cancel => Self::Cancel,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct McpServerElicitationRequestParams {
     pub thread_id: String,
-    /// Active Codex turn when the elicitation was observed, if available.
+    /// Active Codex turn when this elicitation was observed, if app-server could correlate one.
     ///
-    /// This is nullable because MCP defines elicitation as a general
-    /// server-to-client request, not a turn- or tool-call-scoped primitive.
+    /// This is nullable because MCP models elicitation as a standalone server-to-client request
+    /// identified by the MCP server request id. It may be triggered during a turn, but turn
+    /// context is app-server correlation rather than part of the protocol identity of the
+    /// elicitation itself.
     pub turn_id: Option<String>,
     pub server_name: String,
+    /// Human-readable prompt from the underlying MCP elicitation request.
+    ///
+    /// Core currently reduces the upstream RMCP `CreateElicitationRequestParams` to this message
+    /// string before it reaches app-server, so the v2 API cannot expose the full form/url request
+    /// shape yet.
     pub message: String,
-    // TODO: If the MCP elicitation is triggered by an MCP tool call, we should expose the McpToolCall
-    // item ID as well. However, we need to update core to plumb this through first.
+    // TODO: When core can correlate an elicitation with an MCP tool call, expose the associated
+    // McpToolCall item id here as an optional field. The current core event does not carry that
+    // association.
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -4057,6 +4085,29 @@ pub struct McpServerElicitationRequestParams {
 #[ts(export_to = "v2/")]
 pub struct McpServerElicitationRequestResponse {
     pub action: McpServerElicitationAction,
+    /// Structured user input for accepted elicitations, mirroring RMCP `CreateElicitationResult`.
+    ///
+    /// This is nullable because decline/cancel responses have no content, and current core only
+    /// resolves elicitations by decision.
+    pub content: Option<JsonValue>,
+}
+
+impl From<McpServerElicitationRequestResponse> for rmcp::model::CreateElicitationResult {
+    fn from(value: McpServerElicitationRequestResponse) -> Self {
+        Self {
+            action: value.action.into(),
+            content: value.content,
+        }
+    }
+}
+
+impl From<rmcp::model::CreateElicitationResult> for McpServerElicitationRequestResponse {
+    fn from(value: rmcp::model::CreateElicitationResult) -> Self {
+        Self {
+            action: value.action.into(),
+            content: value.content,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -4391,6 +4442,47 @@ mod tests {
 
         let back_to_v2 = SandboxPolicy::from(core_policy);
         assert_eq!(back_to_v2, v2_policy);
+    }
+
+    #[test]
+    fn mcp_server_elicitation_response_round_trips_rmcp_result() {
+        let rmcp_result = rmcp::model::CreateElicitationResult {
+            action: rmcp::model::ElicitationAction::Accept,
+            content: Some(json!({
+                "confirmed": true,
+            })),
+        };
+
+        let v2_response = McpServerElicitationRequestResponse::from(rmcp_result.clone());
+        assert_eq!(
+            v2_response,
+            McpServerElicitationRequestResponse {
+                action: McpServerElicitationAction::Accept,
+                content: Some(json!({
+                    "confirmed": true,
+                })),
+            }
+        );
+        assert_eq!(
+            rmcp::model::CreateElicitationResult::from(v2_response),
+            rmcp_result
+        );
+    }
+
+    #[test]
+    fn mcp_server_elicitation_response_serializes_nullable_content() {
+        let response = McpServerElicitationRequestResponse {
+            action: McpServerElicitationAction::Decline,
+            content: None,
+        };
+
+        assert_eq!(
+            serde_json::to_value(response).expect("response should serialize"),
+            json!({
+                "action": "decline",
+                "content": null,
+            })
+        );
     }
 
     #[test]

@@ -766,10 +766,13 @@ When the client responds to `item/tool/requestUserInput`, the server emits `serv
 
 MCP servers can interrupt a turn and ask the client for a simple accept/decline/cancel decision via `mcpServer/elicitation/request`.
 
+Today app-server only exposes the human-readable `message` from the underlying MCP elicitation
+request. Core does not yet plumb through the full RMCP form/url request shape.
+
 Order of messages:
 
 1. `mcpServer/elicitation/request` (request) — includes `threadId`, nullable `turnId`, `serverName`, and the human-readable `message`.
-2. Client response — `{ "action": "accept" }`, `{ "action": "decline" }`, or `{ "action": "cancel" }`.
+2. Client response — `{ "action": "accept", "content": ... }`, `{ "action": "decline", "content": null }`, or `{ "action": "cancel", "content": null }`.
 3. `serverRequest/resolved` — `{ threadId, requestId }` confirms the pending request has been resolved or cleared, including lifecycle cleanup on turn start/complete/interrupt.
 
 `turnId` is best-effort. When the elicitation is correlated with an active turn, the request includes that turn id; otherwise it is `null`.

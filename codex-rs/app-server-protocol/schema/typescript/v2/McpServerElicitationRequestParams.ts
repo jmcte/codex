@@ -4,9 +4,19 @@
 
 export type McpServerElicitationRequestParams = { threadId: string, 
 /**
- * Active Codex turn when the elicitation was observed, if available.
+ * Active Codex turn when this elicitation was observed, if app-server could correlate one.
  *
- * This is nullable because MCP defines elicitation as a general
- * server-to-client request, not a turn- or tool-call-scoped primitive.
+ * This is nullable because MCP models elicitation as a standalone server-to-client request
+ * identified by the MCP server request id. It may be triggered during a turn, but turn
+ * context is app-server correlation rather than part of the protocol identity of the
+ * elicitation itself.
  */
-turnId: string | null, serverName: string, message: string, };
+turnId: string | null, serverName: string, 
+/**
+ * Human-readable prompt from the underlying MCP elicitation request.
+ *
+ * Core currently reduces the upstream RMCP `CreateElicitationRequestParams` to this message
+ * string before it reaches app-server, so the v2 API cannot expose the full form/url request
+ * shape yet.
+ */
+message: string, };
