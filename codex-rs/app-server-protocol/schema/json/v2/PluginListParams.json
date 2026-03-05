@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "additionalRoots": {
+      "description": "Additional roots to use when discovering repo-scoped marketplaces. Home-scoped marketplaces are always considered.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  },
+  "title": "PluginListParams",
+  "type": "object"
+}
